@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Image Uploader</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 2em;
+    }
+    input[type="file"] {
+      margin: 1em 0;
+    }
+    .preview {
+      margin-top: 1em;
+    }
+    .preview img {
+      max-width: 300px;
+      margin-top: 1em;
+    }
+    .url-box {
+      margin-top: 1em;
+      font-family: monospace;
+      background: #f3f3f3;
+      padding: 0.5em;
+      border-radius: 6px;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+  <h1>📤 Upload Image to R2</h1>
+  <input type="file" id="fileInput" accept="image/*" />
+  <br />
+  <button onclick="uploadFile()">Upload</button>
+  <div class="preview" id="result"></div>
+
+  <script>
+    async function uploadFile() {
+      const file = document.getElementById("fileInput").files[0];
+      if (!file) return alert("Please select a file.");
+
+      const key = encodeURIComponent(file.name);
+      const res = await fetch(`/upload-url?key=${key}`);
+      const { uploadUrl, publicUrl } = await res.json();
+
+      await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file
+      });
+
+      const result = document.getElementById("result");
+      result.innerHTML = `
+        <div class="url-box">
+          <strong>URL:</strong> <a href="${publicUrl}" target="_blank">${publicUrl}</a>
+        </div>
+        <div class="preview">
+          <img src="${publicUrl}" alt="Uploaded Preview" />
+        </div>
+      `;
+
+      navigator.clipboard.writeText(publicUrl).catch(() => {});
+    }
+  </script>
+</body>
+</html>
