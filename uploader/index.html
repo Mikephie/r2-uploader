@@ -1,46 +1,141 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh">
 <head>
-  <meta charset="UTF-8">
-  <title>📤 上传图片 - R2 图床</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>R2 图床上传器</title>
   <style>
-    body { font-family: sans-serif; text-align: center; margin: 2em; }
-    .preview img { max-width: 300px; margin-top: 1em; }
-    .url-box { background: #f2f2f2; padding: 1em; border-radius: 6px; display: inline-block; margin-top: 1em; }
+    body {
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2em;
+      background: #f9f9f9;
+    }
+    h1 {
+      margin-bottom: 1em;
+      font-size: 1.5em;
+    }
+    #dropzone {
+      border: 2px dashed #00aaff;
+      border-radius: 12px;
+      padding: 2em;
+      width: 90%;
+      max-width: 480px;
+      text-align: center;
+      background: #fff;
+      color: #333;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    #dropzone.hover {
+      background: #e6f7ff;
+    }
+    #output {
+      margin-top: 2em;
+      width: 90%;
+      max-width: 480px;
+    }
+    .result {
+      background: #fff;
+      border: 1px solid #ddd;
+      padding: 1em;
+      border-radius: 10px;
+      margin-bottom: 1em;
+      box-shadow: 0 0 5px rgba(0,0,0,0.05);
+    }
+    img {
+      max-width: 100%;
+      margin-top: 0.5em;
+      border-radius: 6px;
+    }
+    input.link {
+      width: 100%;
+      padding: 0.5em;
+      margin-top: 0.5em;
+      font-size: 0.9em;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button.copy-btn {
+      margin-top: 0.5em;
+      padding: 0.4em 1em;
+      font-size: 0.9em;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
-  <h2>📤 上传图片</h2>
-  <input type="file" id="fileInput" accept="image/*" />
-  <br><br>
-  <button onclick="upload()">上传</button>
-
-  <div id="result" class="preview"></div>
+  <h1>📤 上传图片到 R2 图床</h1>
+  <div id="dropzone">拖拽图片或点击选择上传</div>
+  <input type="file" id="fileInput" style="display:none" accept="image/*"/>
+  <div id="output"></div>
 
   <script>
-    async function upload() {
-      const file = document.getElementById('fileInput').files[0];
-      if (!file) return alert('请先选择图片');
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const output = document.getElementById('output');
+    const uploadApi = "https://upload.mikephie.site/upload-url";
 
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('dragover', e => {
+      e.preventDefault();
+      dropzone.classList.add('hover');
+    });
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('hover');
+    });
+    dropzone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropzone.classList.remove('hover');
+      const file = e.dataTransfer.files[0];
+      if (file) handleUpload(file);
+    });
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files[0];
+      if (file) handleUpload(file);
+    });
+
+    async function handleUpload(file) {
       const key = encodeURIComponent(file.name);
-      const res = await fetch(`https://upload.mikephie.site/upload-url?key=${key}`);
-      const { uploadUrl, publicUrl } = await res.json();
+      const res = await fetch(`${uploadApi}?key=${key}`);
+      const data = await res.json();
 
-      await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type },
-        body: file
+      const uploadRes = await fetch(data.uploadUrl, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type }
       });
 
-      document.getElementById('result').innerHTML = `
-        <div class="url-box">
-          ✅ 上传成功：<br>
-          <a href="${publicUrl}" target="_blank">${publicUrl}</a>
-        </div>
-        <img src="${publicUrl}" alt="预览图" />
+      if (uploadRes.ok) {
+        showResult(data.publicUrl);
+      } else {
+        alert("❌ 上传失败！");
+      }
+    }
+
+    function showResult(url) {
+      const result = document.createElement("div");
+      result.className = "result";
+      const thumbUrl = `${url}?w=300`;
+
+      result.innerHTML = `
+        <div><strong>✅ 上传成功：</strong></div>
+        <img src="${thumbUrl}" />
+        <input class="link" value="${url}" readonly />
+        <button class="copy-btn">复制原图链接</button>
       `;
 
-      navigator.clipboard.writeText(publicUrl);
+      const input = result.querySelector("input");
+      const button = result.querySelector("button");
+      button.onclick = () => {
+        input.select();
+        document.execCommand("copy");
+        button.textContent = "✅ 已复制";
+      };
+
+      output.prepend(result);
     }
   </script>
 </body>
