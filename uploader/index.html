@@ -2,47 +2,28 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Image Uploader</title>
+  <title>📤 上传图片 - R2 图床</title>
   <style>
-    body {
-      font-family: sans-serif;
-      text-align: center;
-      padding: 2em;
-    }
-    input[type="file"] {
-      margin: 1em 0;
-    }
-    .preview {
-      margin-top: 1em;
-    }
-    .preview img {
-      max-width: 300px;
-      margin-top: 1em;
-    }
-    .url-box {
-      margin-top: 1em;
-      font-family: monospace;
-      background: #f3f3f3;
-      padding: 0.5em;
-      border-radius: 6px;
-      display: inline-block;
-    }
+    body { font-family: sans-serif; text-align: center; margin: 2em; }
+    .preview img { max-width: 300px; margin-top: 1em; }
+    .url-box { background: #f2f2f2; padding: 1em; border-radius: 6px; display: inline-block; margin-top: 1em; }
   </style>
 </head>
 <body>
-  <h1>📤 Upload Image to R2</h1>
+  <h2>📤 上传图片</h2>
   <input type="file" id="fileInput" accept="image/*" />
-  <br />
-  <button onclick="uploadFile()">Upload</button>
-  <div class="preview" id="result"></div>
+  <br><br>
+  <button onclick="upload()">上传</button>
+
+  <div id="result" class="preview"></div>
 
   <script>
-    async function uploadFile() {
-      const file = document.getElementById("fileInput").files[0];
-      if (!file) return alert("Please select a file.");
+    async function upload() {
+      const file = document.getElementById('fileInput').files[0];
+      if (!file) return alert('请先选择图片');
 
       const key = encodeURIComponent(file.name);
-      const res = await fetch(`/upload-url?key=${key}`);
+      const res = await fetch(`https://upload.mikephie.site/upload-url?key=${key}`);
       const { uploadUrl, publicUrl } = await res.json();
 
       await fetch(uploadUrl, {
@@ -51,17 +32,15 @@
         body: file
       });
 
-      const result = document.getElementById("result");
-      result.innerHTML = `
+      document.getElementById('result').innerHTML = `
         <div class="url-box">
-          <strong>URL:</strong> <a href="${publicUrl}" target="_blank">${publicUrl}</a>
+          ✅ 上传成功：<br>
+          <a href="${publicUrl}" target="_blank">${publicUrl}</a>
         </div>
-        <div class="preview">
-          <img src="${publicUrl}" alt="Uploaded Preview" />
-        </div>
+        <img src="${publicUrl}" alt="预览图" />
       `;
 
-      navigator.clipboard.writeText(publicUrl).catch(() => {});
+      navigator.clipboard.writeText(publicUrl);
     }
   </script>
 </body>
