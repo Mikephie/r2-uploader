@@ -18,6 +18,7 @@
         #linkOutput a { word-break: break-all; color: #007bff; margin-right: 10px; }
         #copyLinkBtn { background-color: #28a745; color: white; padding: 5px 10px; margin-top: 0; }
         #message { margin-top: 20px; white-space: pre-wrap; background-color: #e6f7ff; padding: 15px; border-radius: 4px; border-left: 5px solid #007bff; }
+        #assetListDisplay { border-left: 5px solid #ffc107; background-color: #fffbe6; padding: 15px; /* 增加内边距 */ }
     </style>
 </head>
 <body>
@@ -54,8 +55,11 @@
     
     <pre id="message"></pre>
 
+    <button type="button" id="listAssetsBtn" style="background-color: #6c757d; color: white;">显示所有已上传文件</button>
+    <div id="assetListDisplay" style="margin-top: 15px; border: 1px solid #ddd; display: none;"></div>
+
     <script>
-        // ❗ 步骤 1: 替换为你的 MyMusic Worker 实际部署的 URL
+        // ❗ 步骤 1: 替换为你的 MyMusic Worker 实际部署的 URL (注意：移除末尾斜杠)
         const WORKER_URL = 'https://mymusic.mikephiemy.workers.dev'; 
         
         // ❗ 步骤 2: 替换为你的 R2 公共访问域名 (与 Worker 配置的 PUBLIC_BASE 匹配)
@@ -72,18 +76,20 @@
         const artistInput = document.getElementById('artistInput');
         const albumInput = document.getElementById('albumInput');
         
-        // 新增 DOM 元素引用
         const linkOutputDiv = document.getElementById('linkOutput');
         const musicLinkAnchor = document.getElementById('musicLink');
         const copyLinkButton = document.getElementById('copyLinkBtn');
         
+        const listAssetsBtn = document.getElementById('listAssetsBtn'); 
+        const assetListDisplay = document.getElementById('assetListDisplay'); 
+        
         let lastMusicKey = ''; 
 
-        // --- 元数据读取逻辑 (保持不变) ---
+        // --- 元数据读取逻辑 ---
         musicFileInput.addEventListener('change', async () => {
             const file = musicFileInput.files[0];
             if (!file) return;
-            // ... (元数据读取代码不变) ...
+
             metadataDisplay.style.display = 'block';
             titleInput.value = '正在读取...';
             artistInput.value = '';
@@ -109,7 +115,7 @@
         });
 
 
-        // --- 通用上传函数 (保持不变) ---
+        // --- 通用上传函数 ---
         async function uploadFile(file, customKey, isCover=false) {
             const formData = new FormData();
             formData.append('file', file);
@@ -133,11 +139,11 @@
             return { response, result };
         }
 
-        // --- 1. 上传音乐文件 (添加链接显示逻辑) ---
+        // --- 1. 上传音乐文件 ---
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             messageDisplay.textContent = '开始上传音乐文件...';
-            linkOutputDiv.style.display = 'none'; // 隐藏链接区
+            linkOutputDiv.style.display = 'none'; 
             submitBtn.disabled = true;
             submitCoverBtn.disabled = true;
 
@@ -154,18 +160,14 @@
                 if (response.ok) {
                     messageDisplay.textContent += `\n音乐文件上传成功！\n路径: ${result.keyUsed}\n元数据: ${JSON.stringify(result.metadata, null, 2)}`;
                     
-                    // ----------------------------------------------------
-                    // ❗ 核心新增：构建并显示播放链接
-                    // ----------------------------------------------------
+                    // 构建并显示播放链接
                     const musicKey = result.keyUsed;
-                    // 使用 PUBLIC_BASE_URL 变量构建公共链接
                     const publicUrl = `${PUBLIC_BASE_URL}/${musicKey}`; 
 
                     musicLinkAnchor.href = publicUrl;
                     musicLinkAnchor.textContent = publicUrl;
                     linkOutputDiv.style.display = 'block';
 
-                    // 复制按钮的事件监听
                     copyLinkButton.onclick = function() {
                         navigator.clipboard.writeText(publicUrl).then(() => {
                             alert('播放链接已复制到剪贴板！');
@@ -174,8 +176,6 @@
                             alert('复制失败，请手动复制。');
                         });
                     };
-                    // ----------------------------------------------------
-
 
                     lastMusicKey = result.keyUsed;
                     if (coverFileInput.files[0]) {
@@ -193,7 +193,7 @@
             }
         });
 
-        // --- 2. 上传封面文件 (逻辑保持不变) ---
+        // --- 2. 上传封面文件 ---
         submitCoverBtn.addEventListener('click', async () => {
             const coverFile = coverFileInput.files[0];
             if (!coverFile || !lastMusicKey) {
@@ -205,7 +205,6 @@
             messageDisplay.textContent += '\n\n开始上传封面文件...';
             
             try {
-                // 构建封面 Key
                 const ext = coverFile.name.substring(coverFile.name.lastIndexOf('.'));
                 const baseName = lastMusicKey.replace(/^(audio|covers)\//, '').substring(0, lastMusicKey.lastIndexOf('.'));
                 const coverKey = `${baseName}${ext}`;
@@ -224,6 +223,77 @@
                 lastMusicKey = '';
             }
         });
+
+
+        // --- 3. 获取并显示文件列表 (已修正为带按钮) ---
+        async function fetchAndDisplayAssets() {
+            assetListDisplay.innerHTML = '正在加载资产列表...';
+            assetListDisplay.style.display = 'block';
+            listAssetsBtn.disabled = true;
+
+            try {
+                const response = await fetch(`${WORKER_URL}?action=list`, {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const data = await response.json();
+
+                if (response.ok && data.assets) {
+                    
+                    let htmlContent = `
+                        <p><b>总数:</b> ${data.count} (更新于: ${new Date(data.updatedAt).toLocaleTimeString()})</p>
+                        <hr style="border-top: 1px solid #ccc;">
+                    `;
+                    
+                    data.assets.forEach((asset, index) => {
+                        const copyId = `copy-btn-${index}`;
+                        
+                        htmlContent += `
+                            <div style="margin-bottom: 15px; border-bottom: 1px dashed #eee; padding-bottom: 10px;">
+                                <b>类型:</b> ${asset.type || 'unknown'}<br>
+                                <b>名称:</b> ${asset.name}<br>
+                                <b>URL:</b> <a href="${asset.url}" target="_blank" style="word-break: break-all;">${asset.url}</a>
+                                <button id="${copyId}" 
+                                        style="background-color: #28a745; color: white; padding: 5px 10px; margin-top: 5px; margin-left: 10px;">
+                                    复制链接
+                                </button>
+                            </div>
+                        `;
+                    });
+                    
+                    assetListDisplay.innerHTML = htmlContent;
+
+                    // ❗ 为所有动态创建的按钮绑定复制事件
+                    data.assets.forEach((asset, index) => {
+                        const copyId = `copy-btn-${index}`;
+                        const button = document.getElementById(copyId);
+                        if (button) {
+                            button.onclick = function() {
+                                navigator.clipboard.writeText(asset.url).then(() => {
+                                    button.textContent = '已复制!';
+                                    setTimeout(() => { button.textContent = '复制链接'; }, 1000);
+                                }, (err) => {
+                                    console.error('无法复制链接: ', err);
+                                    alert('复制失败，请手动复制。');
+                                });
+                            };
+                        }
+                    });
+
+                } else {
+                    assetListDisplay.textContent = `加载失败: ${data.error || 'Worker 返回错误。'}`;
+                }
+
+            } catch (e) {
+                assetListDisplay.textContent = `网络错误或解析失败: ${e.message}`;
+            } finally {
+                listAssetsBtn.disabled = false;
+            }
+        }
+
+        // --- 绑定按钮事件 ---
+        listAssetsBtn.addEventListener('click', fetchAndDisplayAssets);
     </script>
 </body>
 </html>
