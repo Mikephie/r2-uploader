@@ -11,8 +11,12 @@
         .file-input { padding: 10px; border: 1px dashed #007bff; border-radius: 4px; }
         .metadata-section { padding: 15px; border: 1px solid #ccc; border-radius: 4px; background-color: #f9f9f9; }
         input[type="text"] { width: 100%; padding: 8px; box-sizing: border-box; margin-top: 5px; }
-        button { padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 15px; }
-        button:disabled { background-color: #aaa; }
+        button { padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; margin-top: 15px; transition: background-color 0.2s; }
+        #submitBtn, #submitCoverBtn { background-color: #007bff; color: white; }
+        #submitBtn:disabled, #submitCoverBtn:disabled { background-color: #aaa; }
+        #linkOutput { margin-top: 10px; padding: 10px; border: 1px solid #00aaff; border-radius: 4px; background-color: #e6f7ff; display: none; }
+        #linkOutput a { word-break: break-all; color: #007bff; margin-right: 10px; }
+        #copyLinkBtn { background-color: #28a745; color: white; padding: 5px 10px; margin-top: 0; }
         #message { margin-top: 20px; white-space: pre-wrap; background-color: #e6f7ff; padding: 15px; border-radius: 4px; border-left: 5px solid #007bff; }
     </style>
 </head>
@@ -42,12 +46,21 @@
         <button type="button" id="submitCoverBtn" disabled>上传封面文件</button>
     </form>
     
+    <div id="linkOutput" style="margin-top: 10px; display: none;">
+        <strong>播放链接:</strong>
+        <a id="musicLink" href="#" target="_blank"></a>
+        <button id="copyLinkBtn">复制链接</button>
+    </div>
+    
     <pre id="message"></pre>
 
     <script>
-        // ❗ 替换为你的 MyMusic Worker 实际部署的 URL
+        // ❗ 步骤 1: 替换为你的 MyMusic Worker 实际部署的 URL
         const WORKER_URL = 'https://mymusic.mikephiemy.workers.dev/'; 
-
+        
+        // ❗ 步骤 2: 替换为你的 R2 公共访问域名 (与 Worker 配置的 PUBLIC_BASE 匹配)
+        const PUBLIC_BASE_URL = 'https://pub-29d19c8bafe64fa09b3241d38311ba54.r2.dev'; 
+        
         const form = document.getElementById('uploadForm');
         const musicFileInput = document.getElementById('musicFile');
         const coverFileInput = document.getElementById('coverFile');
@@ -59,13 +72,18 @@
         const artistInput = document.getElementById('artistInput');
         const albumInput = document.getElementById('albumInput');
         
-        let lastMusicKey = ''; // 存储上次上传成功的音乐 key，用于命名封面
+        // 新增 DOM 元素引用
+        const linkOutputDiv = document.getElementById('linkOutput');
+        const musicLinkAnchor = document.getElementById('musicLink');
+        const copyLinkButton = document.getElementById('copyLinkBtn');
+        
+        let lastMusicKey = ''; 
 
-        // --- 元数据读取逻辑 ---
+        // --- 元数据读取逻辑 (保持不变) ---
         musicFileInput.addEventListener('change', async () => {
             const file = musicFileInput.files[0];
             if (!file) return;
-
+            // ... (元数据读取代码不变) ...
             metadataDisplay.style.display = 'block';
             titleInput.value = '正在读取...';
             artistInput.value = '';
@@ -91,17 +109,15 @@
         });
 
 
-        // --- 通用上传函数 ---
+        // --- 通用上传函数 (保持不变) ---
         async function uploadFile(file, customKey, isCover=false) {
             const formData = new FormData();
             formData.append('file', file);
             
-            // 如果提供了自定义 key (通常用于封面图)，则使用它
             if (customKey) {
                  formData.append('key', customKey); 
             }
             
-            // 如果是音乐文件，附加手动或自动读取的元数据
             if (!isCover) {
                 formData.append('title', titleInput.value);
                 formData.append('artist', artistInput.value);
@@ -117,10 +133,11 @@
             return { response, result };
         }
 
-        // --- 1. 上传音乐文件 ---
+        // --- 1. 上传音乐文件 (添加链接显示逻辑) ---
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             messageDisplay.textContent = '开始上传音乐文件...';
+            linkOutputDiv.style.display = 'none'; // 隐藏链接区
             submitBtn.disabled = true;
             submitCoverBtn.disabled = true;
 
@@ -137,7 +154,29 @@
                 if (response.ok) {
                     messageDisplay.textContent += `\n音乐文件上传成功！\n路径: ${result.keyUsed}\n元数据: ${JSON.stringify(result.metadata, null, 2)}`;
                     
-                    // 存储成功的 Key，用于命名封面
+                    // ----------------------------------------------------
+                    // ❗ 核心新增：构建并显示播放链接
+                    // ----------------------------------------------------
+                    const musicKey = result.keyUsed;
+                    // 使用 PUBLIC_BASE_URL 变量构建公共链接
+                    const publicUrl = `${PUBLIC_BASE_URL}/${musicKey}`; 
+
+                    musicLinkAnchor.href = publicUrl;
+                    musicLinkAnchor.textContent = publicUrl;
+                    linkOutputDiv.style.display = 'block';
+
+                    // 复制按钮的事件监听
+                    copyLinkButton.onclick = function() {
+                        navigator.clipboard.writeText(publicUrl).then(() => {
+                            alert('播放链接已复制到剪贴板！');
+                        }, (err) => {
+                            console.error('无法复制链接: ', err);
+                            alert('复制失败，请手动复制。');
+                        });
+                    };
+                    // ----------------------------------------------------
+
+
                     lastMusicKey = result.keyUsed;
                     if (coverFileInput.files[0]) {
                         submitCoverBtn.disabled = false;
@@ -154,7 +193,7 @@
             }
         });
 
-        // --- 2. 上传封面文件 (独立流程) ---
+        // --- 2. 上传封面文件 (逻辑保持不变) ---
         submitCoverBtn.addEventListener('click', async () => {
             const coverFile = coverFileInput.files[0];
             if (!coverFile || !lastMusicKey) {
@@ -166,7 +205,7 @@
             messageDisplay.textContent += '\n\n开始上传封面文件...';
             
             try {
-                // 构建封面 Key：将封面图命名为与音乐文件相同的名字，但使用 covers/ 前缀和图片后缀
+                // 构建封面 Key
                 const ext = coverFile.name.substring(coverFile.name.lastIndexOf('.'));
                 const baseName = lastMusicKey.replace(/^(audio|covers)\//, '').substring(0, lastMusicKey.lastIndexOf('.'));
                 const coverKey = `${baseName}${ext}`;
@@ -175,8 +214,6 @@
                 
                 if (response.ok) {
                     messageDisplay.textContent += `\n封面上传成功！\n路径: ${result.keyUsed}`;
-                    // 理论上这里应该更新音乐文件的 R2 customMetadata 来链接封面，但 Worker 无法做到。
-                    // 目前的方案：前端根据音乐 key 和封面 key 规则，自行推断链接。
                 } else {
                     messageDisplay.textContent += `\n封面上传失败！\n错误信息: ${result.error}`;
                 }
@@ -184,7 +221,6 @@
                 messageDisplay.textContent += `\n网络/未知错误: ${error.message}`;
             } finally {
                 submitCoverBtn.disabled = false;
-                // 重置上传状态
                 lastMusicKey = '';
             }
         });
