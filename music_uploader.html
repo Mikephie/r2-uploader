@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>MyMusic 资产上传</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsmediatags@3.9.7/dist/jsmediatags.min.js"></script> 
+    
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        #uploadForm { display: flex; flex-direction: column; max-width: 450px; gap: 10px; border: 1px solid #007bff; padding: 25px; border-radius: 8px; }
+        .file-input { padding: 10px; border: 1px dashed #007bff; border-radius: 4px; }
+        .metadata-section { padding: 15px; border: 1px solid #ccc; border-radius: 4px; background-color: #f9f9f9; }
+        input[type="text"] { width: 100%; padding: 8px; box-sizing: border-box; margin-top: 5px; }
+        button { padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 15px; }
+        button:disabled { background-color: #aaa; }
+        #message { margin-top: 20px; white-space: pre-wrap; background-color: #e6f7ff; padding: 15px; border-radius: 4px; border-left: 5px solid #007bff; }
+    </style>
+</head>
+<body>
+    <h1>MyMusic 资产上传</h1>
+    
+    <form id="uploadForm">
+        <label for="musicFile">选择音乐文件 (MP3/FLAC/WAV...)</label>
+        <input type="file" id="musicFile" accept="audio/*" class="file-input" required>
+        
+        <label for="coverFile">选择封面图片 (可选，**需单独上传**)</label>
+        <input type="file" id="coverFile" accept="image/*" class="file-input">
+        
+        <div id="metadataDisplay" class="metadata-section" style="display: none;">
+            <strong>读取到的元数据：</strong>
+            <label for="titleInput">歌曲名 (Title):</label>
+            <input type="text" id="titleInput" placeholder="自动读取或手动输入">
+            
+            <label for="artistInput">艺术家 (Artist):</label>
+            <input type="text" id="artistInput" placeholder="自动读取或手动输入">
+            
+            <label for="albumInput">专辑 (Album):</label>
+            <input type="text" id="albumInput" placeholder="自动读取或手动输入">
+        </div>
+        
+        <button type="submit" id="submitBtn">开始上传音乐文件</button>
+        <button type="button" id="submitCoverBtn" disabled>上传封面文件</button>
+    </form>
+    
+    <pre id="message"></pre>
+
+    <script>
+        // ❗ 替换为你的 MyMusic Worker 实际部署的 URL
+        const WORKER_URL = 'https://mymusic.yourworker.dev'; 
+
+        const form = document.getElementById('uploadForm');
+        const musicFileInput = document.getElementById('musicFile');
+        const coverFileInput = document.getElementById('coverFile');
+        const submitBtn = document.getElementById('submitBtn');
+        const submitCoverBtn = document.getElementById('submitCoverBtn');
+        const messageDisplay = document.getElementById('message');
+        const metadataDisplay = document.getElementById('metadataDisplay');
+        const titleInput = document.getElementById('titleInput');
+        const artistInput = document.getElementById('artistInput');
+        const albumInput = document.getElementById('albumInput');
+        
+        let lastMusicKey = ''; // 存储上次上传成功的音乐 key，用于命名封面
+
+        // --- 元数据读取逻辑 ---
+        musicFileInput.addEventListener('change', async () => {
+            const file = musicFileInput.files[0];
+            if (!file) return;
+
+            metadataDisplay.style.display = 'block';
+            titleInput.value = '正在读取...';
+            artistInput.value = '';
+            albumInput.value = '';
+            
+            if (typeof jsmediatags === 'undefined') {
+                titleInput.value = '无法读取元数据，请手动输入。';
+                return;
+            }
+
+            jsmediatags.read(file, {
+                onSuccess: function(tag) {
+                    titleInput.value = tag.tags.title || '';
+                    artistInput.value = tag.tags.artist || '';
+                    albumInput.value = tag.tags.album || '';
+                },
+                onError: function() {
+                    titleInput.value = file.name;
+                    artistInput.value = '';
+                    albumInput.value = '(读取失败)';
+                }
+            });
+        });
+
+
+        // --- 通用上传函数 ---
+        async function uploadFile(file, customKey, isCover=false) {
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            // 如果提供了自定义 key (通常用于封面图)，则使用它
+            if (customKey) {
+                 formData.append('key', customKey); 
+            }
+            
+            // 如果是音乐文件，附加手动或自动读取的元数据
+            if (!isCover) {
+                formData.append('title', titleInput.value);
+                formData.append('artist', artistInput.value);
+                formData.append('album', albumInput.value);
+            }
+
+            const response = await fetch(WORKER_URL, {
+                method: 'POST',
+                body: formData,
+            });
+
+            const result = await response.json();
+            return { response, result };
+        }
+
+        // --- 1. 上传音乐文件 ---
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            messageDisplay.textContent = '开始上传音乐文件...';
+            submitBtn.disabled = true;
+            submitCoverBtn.disabled = true;
+
+            const musicFile = musicFileInput.files[0];
+            if (!musicFile) {
+                messageDisplay.textContent = '错误: 请选择一个音乐文件。';
+                submitBtn.disabled = false;
+                return;
+            }
+            
+            try {
+                const { response, result } = await uploadFile(musicFile, null, false);
+                
+                if (response.ok) {
+                    messageDisplay.textContent += `\n音乐文件上传成功！\n路径: ${result.keyUsed}\n元数据: ${JSON.stringify(result.metadata, null, 2)}`;
+                    
+                    // 存储成功的 Key，用于命名封面
+                    lastMusicKey = result.keyUsed;
+                    if (coverFileInput.files[0]) {
+                        submitCoverBtn.disabled = false;
+                        messageDisplay.textContent += '\n\n✅ 音乐文件已就绪。请点击 "上传封面文件" 按钮上传封面。';
+                    }
+                } else {
+                    messageDisplay.textContent += `\n上传失败！\n错误信息: ${result.error}`;
+                }
+
+            } catch (error) {
+                messageDisplay.textContent += `\n网络/未知错误: ${error.message}`;
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
+
+        // --- 2. 上传封面文件 (独立流程) ---
+        submitCoverBtn.addEventListener('click', async () => {
+            const coverFile = coverFileInput.files[0];
+            if (!coverFile || !lastMusicKey) {
+                messageDisplay.textContent += '\n错误：没有选择封面文件或音乐文件尚未上传。';
+                return;
+            }
+            
+            submitCoverBtn.disabled = true;
+            messageDisplay.textContent += '\n\n开始上传封面文件...';
+            
+            try {
+                // 构建封面 Key：将封面图命名为与音乐文件相同的名字，但使用 covers/ 前缀和图片后缀
+                const ext = coverFile.name.substring(coverFile.name.lastIndexOf('.'));
+                const baseName = lastMusicKey.replace(/^(audio|covers)\//, '').substring(0, lastMusicKey.lastIndexOf('.'));
+                const coverKey = `${baseName}${ext}`;
+
+                const { response, result } = await uploadFile(coverFile, coverKey, true);
+                
+                if (response.ok) {
+                    messageDisplay.textContent += `\n封面上传成功！\n路径: ${result.keyUsed}`;
+                    // 理论上这里应该更新音乐文件的 R2 customMetadata 来链接封面，但 Worker 无法做到。
+                    // 目前的方案：前端根据音乐 key 和封面 key 规则，自行推断链接。
+                } else {
+                    messageDisplay.textContent += `\n封面上传失败！\n错误信息: ${result.error}`;
+                }
+            } catch (error) {
+                messageDisplay.textContent += `\n网络/未知错误: ${error.message}`;
+            } finally {
+                submitCoverBtn.disabled = false;
+                // 重置上传状态
+                lastMusicKey = '';
+            }
+        });
+    </script>
+</body>
+</html>
